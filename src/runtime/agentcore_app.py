@@ -31,11 +31,11 @@ async def invoke(payload: Dict[str, Any], context) -> Dict[str, Any]:
     """
     Main entrypoint for AgentCore Runtime.
     Note: This must be async and accept a context parameter for AgentCore compatibility.
-    
+
     Args:
         payload: Request payload containing the user prompt
         context: AgentCore runtime context (required by framework)
-        
+
     Returns:
         Response dictionary with the agent's result
     """
@@ -47,22 +47,22 @@ async def invoke(payload: Dict[str, Any], context) -> Dict[str, Any]:
                 "error": "No prompt provided in the request payload",
                 "status": "error"
             }
-        
+
         logger.info(f"Processing request: {prompt[:100]}...")
-        
+
         # Create and invoke the agent
         agent = create_agent()
-        
+
         # Use synchronous invocation (the agent handles it internally)
         result = agent(prompt)
-        
+
         logger.info("Request processed successfully")
-        
+
         return {
             "result": str(result),
             "status": "success"
         }
-        
+
     except Exception as e:
         logger.error(f"Error processing request: {str(e)}", exc_info=True)
         return {
@@ -71,12 +71,8 @@ async def invoke(payload: Dict[str, Any], context) -> Dict[str, Any]:
         }
 
 
-@app.ping
-def ping():
-    """
-    Custom ping endpoint to avoid the dict attribute error.
-    """
-    return {"status": "healthy", "message": "Agent is running"}
+# Using default ping implementation from BedrockAgentCoreApp
+# The framework provides a built-in health check endpoint at /ping
 
 
 def main():
@@ -90,7 +86,7 @@ def main():
     print("   - Extract information from web content")
     print()
     print("🌐 Server starting on port 8080...")
-    
+
     # Run the app (this will start the HTTP server on port 8080)
     app.run()
 
