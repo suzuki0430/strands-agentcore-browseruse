@@ -4,3 +4,4 @@ bedrock-agentcore
 boto3
 python-dotenv
 asyncio
+langchain-aws

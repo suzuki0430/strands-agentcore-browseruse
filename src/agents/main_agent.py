@@ -2,131 +2,137 @@
 AWS Documentation Search Agent using Strands Agents v1.8.0
 """
 import os
-import asyncio
-from typing import Dict, Any
+import logging
 from dotenv import load_dotenv
-from strands import Agent
-from strands.integrations.bedrock import BedrockChatModel
-from src.tools.browser_tool import AgentCoreBrowserTool
+from strands import Agent, tool
+from strands.models import BedrockModel
+from src.tools.browser_tool import search_aws_docs, browse_url
 
 # Load environment variables
 load_dotenv()
 
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
-class AWSDocsAgent:
+# System prompt for the agent
+SYSTEM_PROMPT = """You are an AWS documentation expert assistant. Your role is to help users find information 
+from AWS documentation using web browsing capabilities.
+
+When users ask questions about AWS services, configurations, or best practices:
+1. Use the search_aws_docs tool to search AWS documentation
+2. Use the browse_url tool to access specific URLs if needed
+3. Provide clear, accurate answers based on the official documentation
+4. Include links to relevant documentation when possible
+
+Always prioritize official AWS documentation as your source of truth.
+"""
+
+
+@tool
+async def search_aws_docs_tool(query: str) -> str:
     """
-    An agent that can search AWS documentation and answer questions
-    using AgentCore Browser and Browser Use.
+    Search AWS documentation using natural language query.
+
+    Args:
+        query: The search query for AWS documentation
+
+    Returns:
+        Extracted content from AWS documentation
     """
-
-    def __init__(self):
-        self.browser_tool = AgentCoreBrowserTool()
-
-        # Initialize Bedrock model
-        self.model = BedrockChatModel(
-            model_id=os.getenv('BEDROCK_MODEL_ID',
-                               'anthropic.claude-sonnet-4-20250514-v1:0'),
-            region=os.getenv('AWS_REGION', 'us-west-2')
-        )
-
-        # Create Strands Agent with browser tool
-        self.agent = Agent(
-            name="aws_docs_agent",
-            model=self.model,
-            tools=[self.create_browser_tool()],
-            instructions="""
-            You are an AWS documentation expert assistant. Your role is to help users find information 
-            from AWS documentation using web browsing capabilities.
-            
-            When users ask questions about AWS services, configurations, or best practices:
-            1. Use the browser tool to search AWS documentation
-            2. Extract relevant information from the search results
-            3. Provide clear, accurate answers based on the official documentation
-            4. Include links to relevant documentation when possible
-            
-            Always prioritize official AWS documentation as your source of truth.
-            """
-        )
-
-    def create_browser_tool(self) -> Dict[str, Any]:
-        """
-        Create browser tool definition for Strands Agent.
-        """
-        async def browser_tool_handler(action: str, **kwargs) -> str:
-            """Handle browser tool execution."""
-            return await self.browser_tool.execute(action, **kwargs)
-
-        return {
-            "name": "browser_tool",
-            "description": "Search AWS documentation or browse web pages using natural language instructions",
-            "function": browser_tool_handler,
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "action": {
-                        "type": "string",
-                        "enum": ["search_aws_docs", "browse_url"],
-                        "description": "The action to perform"
-                    },
-                    "query": {
-                        "type": "string",
-                        "description": "Search query for AWS docs (when action is search_aws_docs)"
-                    },
-                    "url": {
-                        "type": "string",
-                        "description": "URL to browse (when action is browse_url)"
-                    },
-                    "instruction": {
-                        "type": "string",
-                        "description": "Natural language instruction for browsing (when action is browse_url)"
-                    }
-                },
-                "required": ["action"]
-            }
-        }
-
-    async def run(self, query: str) -> str:
-        """
-        Process a user query and return an answer based on AWS documentation.
-
-        Args:
-            query: User's question about AWS services or configurations
-
-        Returns:
-            Answer based on AWS documentation
-        """
-        try:
-            # Run the agent with the user query
-            result = await self.agent.run(query)
-            return result
-        except Exception as e:
-            return f"Error processing query: {str(e)}"
-
-    def run_sync(self, query: str) -> str:
-        """
-        Synchronous wrapper for the async run method.
-        """
-        return asyncio.run(self.run(query))
+    logger.info(f"Searching AWS docs for: {query}")
+    return await search_aws_docs(query)
 
 
-async def main():
+@tool
+async def browse_url_tool(url: str, instruction: str = "Extract the main content") -> str:
     """
-    Example usage of the AWS Docs Agent.
+    Browse any URL with specific instructions.
+
+    Args:
+        url: The URL to browse
+        instruction: Natural language instruction for what to do on the page
+
+    Returns:
+        Result of the browsing action
     """
-    agent = AWSDocsAgent()
-
-    # Example queries
-    test_queries = [
-        "How do I create an S3 bucket lifecycle policy?",
-        "What are the best practices for Lambda cold start optimization?",
-        "How to configure DynamoDB Global Secondary Index?"
-    ]
-
-    for query in test_queries:
-        print(f"\n🔍 Query: {query}")
-        result = await agent.run(query)
-        print(f"📋 Answer: {result}")
+    logger.info(f"Browsing URL: {url}")
+    return await browse_url(url, instruction)
 
 
+def create_agent():
+    """
+    Create and configure the AWS Docs Agent.
+    
+    Returns:
+        Configured Strands Agent instance
+    """
+    # Initialize Bedrock model
+    model = BedrockModel(
+        model_id=os.getenv('BEDROCK_MODEL_ID', 'us.anthropic.claude-sonnet-4-20250514-v1:0'),
+        params={
+            "max_tokens": 2048,
+            "temperature": 0.3,
+            "top_p": 0.8
+        },
+        region=os.getenv('AWS_REGION', 'us-west-2'),
+        read_timeout=600,
+    )
+    
+    # Create Strands Agent with browser tools
+    agent = Agent(
+        name="aws_docs_agent",
+        model=model,
+        tools=[search_aws_docs_tool, browse_url_tool],
+        system_prompt=SYSTEM_PROMPT
+    )
+    
+    return agent
+
+
+def process_query(query: str) -> str:
+    """
+    Process a user query synchronously.
+    
+    Args:
+        query: User's question about AWS services or configurations
+    
+    Returns:
+        Answer based on AWS documentation
+    """
+    try:
+        agent = create_agent()
+        # Use synchronous invocation
+        result = agent(query)
+        return str(result)
+    except Exception as e:
+        logger.error(f"Error processing query: {str(e)}", exc_info=True)
+        return f"Error processing query: {str(e)}"
+
+
+# For testing purposes
 if __name__ == "__main__":
-    asyncio.run(main())
+    import asyncio
+    
+    async def test_agent():
+        """Test the agent with sample queries."""
+        test_queries = [
+            "How do I create an S3 bucket lifecycle policy?",
+            "What are the best practices for Lambda cold start optimization?",
+        ]
+        
+        agent = create_agent()
+        
+        for query in test_queries:
+            print(f"\n🔍 Query: {query}")
+            try:
+                # Use async invocation for testing
+                result = await agent.invoke_async(query)
+                print(f"📋 Answer: {result}")
+            except Exception as e:
+                print(f"❌ Error: {e}")
+    
+    asyncio.run(test_agent())

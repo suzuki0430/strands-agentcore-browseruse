@@ -1,131 +1,149 @@
 """
 Browser Tool that integrates AgentCore Browser and Browser Use
 """
-import asyncio
 import os
-from typing import Dict, Any
-from browser_use import Browser
-from bedrock_agentcore.tools.browser_client import browser_session
+import logging
+import contextlib
+from typing import Optional
+from bedrock_agentcore.tools.browser_client import BrowserClient
+from browser_use import Agent as BrowserUseAgent
+from browser_use.browser.session import BrowserSession
+from browser_use.browser import BrowserProfile
+from langchain_aws import ChatBedrockConverse
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 
-class AgentCoreBrowserTool:
+async def execute_browser_task(
+    instruction: str,
+    starting_url: str = "https://docs.aws.amazon.com",
+    region: str = None
+) -> str:
     """
-    A tool that combines AWS AgentCore Browser (remote browser environment)
-    with Browser Use (browser automation client) for web scraping and interaction.
+    Execute a browser automation task using AgentCore Browser and Browser Use.
+    
+    Args:
+        instruction: Natural language instruction for the browser task
+        starting_url: Initial URL to navigate to
+        region: AWS region for AgentCore Browser (defaults to AGENTCORE_BROWSER_REGION env var)
+    
+    Returns:
+        Result of the browser task execution
+    """
+    region = region or os.getenv('AGENTCORE_BROWSER_REGION', 'us-west-2')
+    
+    logger.info(f"Starting browser task: {instruction[:100]}...")
+    logger.info(f"Initial URL: {starting_url}")
+    
+    client = BrowserClient(region=region)
+    browser_session = None
+    
+    try:
+        # Start AgentCore Browser session
+        client.start()
+        ws_url, headers = client.generate_ws_headers()
+        
+        logger.info(f"Browser session created in region {region}")
+        logger.debug(f"CDP WebSocket URL: {ws_url[:100]}...")
+        
+        # Configure Browser Use profile
+        profile = BrowserProfile(
+            headers=headers,
+            timeout=180000,  # 3 minutes timeout
+        )
+        
+        # Create Browser Use session
+        browser_session = BrowserSession(
+            cdp_url=ws_url,
+            browser_profile=profile,
+        )
+        
+        logger.info("Starting Browser Use session...")
+        await browser_session.start()
+        logger.info("Browser Use session started successfully")
+        
+        # Initialize Bedrock LLM for Browser Use
+        bedrock_chat = ChatBedrockConverse(
+            model_id=os.getenv('BEDROCK_MODEL_ID', 'us.anthropic.claude-sonnet-4-20250514-v1:0'),
+            region_name=region
+        )
+        
+        # Create Browser Use agent with the task
+        task = f"""
+        Navigate to {starting_url} and then perform the following task:
+        {instruction}
+        
+        Please provide a clear and concise summary of the results.
+        """
+        
+        browser_use_agent = BrowserUseAgent(
+            task=task,
+            llm=bedrock_chat,
+            browser_session=browser_session,
+        )
+        
+        logger.info("Executing Browser Use task...")
+        result = await browser_use_agent.run()
+        
+        logger.info("Task completed successfully")
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error executing browser task: {str(e)}", exc_info=True)
+        return f"Error executing browser task: {str(e)}"
+        
+    finally:
+        # Clean up browser session
+        if browser_session:
+            with contextlib.suppress(Exception):
+                await browser_session.close()
+                logger.info("Browser session closed")
+        
+        # Stop AgentCore Browser client
+        with contextlib.suppress(Exception):
+            client.stop()
+            logger.info("Browser client stopped")
+
+
+async def search_aws_docs(query: str, region: str = None) -> str:
+    """
+    Search AWS documentation for a specific query.
+    
+    Args:
+        query: The search query
+        region: AWS region for AgentCore Browser
+    
+    Returns:
+        Search results from AWS documentation
+    """
+    instruction = f"""
+    Search for "{query}" in the AWS documentation.
+    Extract and summarize the most relevant information from the search results.
+    Include any important details, code examples, or best practices mentioned.
     """
     
-    def __init__(self, region: str = None):
-        self.region = region or os.getenv('AGENTCORE_BROWSER_REGION', 'us-west-2')
+    return await execute_browser_task(
+        instruction=instruction,
+        starting_url="https://docs.aws.amazon.com",
+        region=region
+    )
+
+
+async def browse_url(url: str, instruction: str = "Extract the main content", region: str = None) -> str:
+    """
+    Browse a specific URL and perform an action.
     
-    async def search_aws_docs(self, query: str) -> str:
-        """
-        Search AWS documentation using natural language query.
-        
-        Args:
-            query: The search query in natural language
-            
-        Returns:
-            Extracted content from AWS documentation
-        """
-        try:
-            # Create AgentCore Browser session and get CDP URL
-            with browser_session(self.region) as client:
-                ws_url, headers = client.generate_ws_headers()
-                
-                # Initialize Browser Use with CDP connection
-                browser = Browser(
-                    cdp_url=ws_url,
-                    headers=headers
-                )
-                
-                # Navigate to AWS Documentation
-                await browser.navigate("https://docs.aws.amazon.com")
-                
-                # Use Browser Use's natural language interface to search
-                search_instruction = f"Search for '{query}' in the search box and extract the main content from the first relevant result"
-                result = await browser.use(search_instruction)
-                
-                return result
-                
-        except Exception as e:
-            return f"Error searching AWS docs: {str(e)}"
+    Args:
+        url: The URL to browse
+        instruction: What to do on the page
+        region: AWS region for AgentCore Browser
     
-    async def browse_url(self, url: str, instruction: str) -> str:
-        """
-        Browse any URL with specific instructions.
-        
-        Args:
-            url: The URL to browse
-            instruction: Natural language instruction for what to do on the page
-            
-        Returns:
-            Result of the browsing action
-        """
-        try:
-            with browser_session(self.region) as client:
-                ws_url, headers = client.generate_ws_headers()
-                
-                browser = Browser(
-                    cdp_url=ws_url,
-                    headers=headers
-                )
-                
-                await browser.navigate(url)
-                result = await browser.use(instruction)
-                
-                return result
-                
-        except Exception as e:
-            return f"Error browsing {url}: {str(e)}"
-    
-    def get_tool_definition(self) -> Dict[str, Any]:
-        """
-        Return tool definition for Strands Agents integration.
-        """
-        return {
-            "name": "browser_tool",
-            "description": "Search AWS documentation or browse web pages using natural language instructions",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "action": {
-                        "type": "string",
-                        "enum": ["search_aws_docs", "browse_url"],
-                        "description": "The action to perform"
-                    },
-                    "query": {
-                        "type": "string",
-                        "description": "Search query for AWS docs (when action is search_aws_docs)"
-                    },
-                    "url": {
-                        "type": "string",
-                        "description": "URL to browse (when action is browse_url)"
-                    },
-                    "instruction": {
-                        "type": "string",
-                        "description": "Natural language instruction for browsing (when action is browse_url)"
-                    }
-                },
-                "required": ["action"]
-            }
-        }
-    
-    async def execute(self, action: str, **kwargs) -> str:
-        """
-        Execute the specified action with given parameters.
-        """
-        if action == "search_aws_docs":
-            query = kwargs.get("query", "")
-            if not query:
-                return "Error: query parameter is required for search_aws_docs action"
-            return await self.search_aws_docs(query)
-        
-        elif action == "browse_url":
-            url = kwargs.get("url", "")
-            instruction = kwargs.get("instruction", "extract main content")
-            if not url:
-                return "Error: url parameter is required for browse_url action"
-            return await self.browse_url(url, instruction)
-        
-        else:
-            return f"Error: Unknown action '{action}'"
+    Returns:
+        Result of the browsing action
+    """
+    return await execute_browser_task(
+        instruction=instruction,
+        starting_url=url,
+        region=region
+    )

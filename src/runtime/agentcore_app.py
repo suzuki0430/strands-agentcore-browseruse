@@ -2,29 +2,39 @@
 AgentCore Runtime Application
 """
 import os
-import asyncio
+import logging
 from typing import Dict, Any
 from dotenv import load_dotenv
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
-from src.agents.main_agent import AWSDocsAgent
+from src.agents.main_agent import create_agent
 
 # Load environment variables
 load_dotenv()
 
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Set timeout for long-running browser operations
+os.environ['UVICORN_TIMEOUT_KEEP_ALIVE'] = '28800'
+os.environ['UVICORN_TIMEOUT_GRACEFUL_SHUTDOWN'] = '28800'
+
 # Initialize the AgentCore app
 app = BedrockAgentCoreApp()
 
-# Initialize the AWS Docs Agent
-aws_docs_agent = AWSDocsAgent()
-
 
 @app.entrypoint
-def invoke(payload: Dict[str, Any]) -> Dict[str, Any]:
+async def invoke(payload: Dict[str, Any], context) -> Dict[str, Any]:
     """
     Main entrypoint for AgentCore Runtime.
+    Note: This must be async and accept a context parameter for AgentCore compatibility.
     
     Args:
         payload: Request payload containing the user prompt
+        context: AgentCore runtime context (required by framework)
         
     Returns:
         Response dictionary with the agent's result
@@ -34,34 +44,39 @@ def invoke(payload: Dict[str, Any]) -> Dict[str, Any]:
         prompt = payload.get("prompt", "")
         if not prompt:
             return {
-                "error": "No prompt provided in the request payload"
+                "error": "No prompt provided in the request payload",
+                "status": "error"
             }
         
-        # Run the agent synchronously (AgentCore Runtime expects sync functions)
-        result = aws_docs_agent.run_sync(prompt)
+        logger.info(f"Processing request: {prompt[:100]}...")
+        
+        # Create and invoke the agent
+        agent = create_agent()
+        
+        # Use synchronous invocation (the agent handles it internally)
+        result = agent(prompt)
+        
+        logger.info("Request processed successfully")
         
         return {
-            "result": result,
+            "result": str(result),
             "status": "success"
         }
         
     except Exception as e:
+        logger.error(f"Error processing request: {str(e)}", exc_info=True)
         return {
             "error": f"Error processing request: {str(e)}",
             "status": "error"
         }
 
 
-@app.health_check
-def health_check() -> Dict[str, str]:
+@app.ping
+def ping():
     """
-    Health check endpoint for AgentCore Runtime.
+    Custom ping endpoint to avoid the dict attribute error.
     """
-    return {
-        "status": "healthy",
-        "service": "AWS Docs Agent",
-        "version": "1.0.0"
-    }
+    return {"status": "healthy", "message": "Agent is running"}
 
 
 def main():

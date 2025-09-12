@@ -3,7 +3,18 @@
     "allow": [
       "WebSearch",
       "WebFetch(domain:strandsagents.com)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Bash(pip3 search:*)",
+      "Bash(pip3 list:*)",
+      "WebFetch(domain:pypi.org)",
+      "Bash(agentcore:*)",
+      "Bash(agentcore launch:*)",
+      "Bash(source:*)",
+      "Bash(python:*)",
+      "Bash(docker tag:*)",
+      "Bash(pip install:*)",
+      "Bash(venv/bin/python:*)",
+      "Bash(venv/bin/agentcore launch:*)"
     ],
     "deny": [],
     "ask": []

@@ -139,3 +139,9 @@ Thumbs.db
 
 # Docker
 .dockerignore
+
+# AgentCore configuration
+.bedrock_agentcore.yaml
+.bedrock_agentcore.yml
+
+.claude/
