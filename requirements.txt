@@ -1,0 +1,6 @@
+strands-agents==1.8.0
+browser-use
+bedrock-agentcore
+boto3
+python-dotenv
+asyncio
