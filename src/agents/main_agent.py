@@ -66,13 +66,14 @@ async def browse_url_tool(url: str, instruction: str = "Extract the main content
 def create_agent():
     """
     Create and configure the AWS Docs Agent.
-    
+
     Returns:
         Configured Strands Agent instance
     """
     # Initialize Bedrock model
     model = BedrockModel(
-        model_id=os.getenv('BEDROCK_MODEL_ID', 'us.anthropic.claude-sonnet-4-20250514-v1:0'),
+        model_id=os.getenv('BEDROCK_MODEL_ID',
+                           'us.anthropic.claude-sonnet-4-20250514-v1:0'),
         params={
             "max_tokens": 2048,
             "temperature": 0.3,
@@ -81,7 +82,7 @@ def create_agent():
         region=os.getenv('AWS_REGION', 'us-west-2'),
         read_timeout=600,
     )
-    
+
     # Create Strands Agent with browser tools
     agent = Agent(
         name="aws_docs_agent",
@@ -89,17 +90,17 @@ def create_agent():
         tools=[search_aws_docs_tool, browse_url_tool],
         system_prompt=SYSTEM_PROMPT
     )
-    
+
     return agent
 
 
 def process_query(query: str) -> str:
     """
     Process a user query synchronously.
-    
+
     Args:
         query: User's question about AWS services or configurations
-    
+
     Returns:
         Answer based on AWS documentation
     """
@@ -116,16 +117,16 @@ def process_query(query: str) -> str:
 # For testing purposes
 if __name__ == "__main__":
     import asyncio
-    
+
     async def test_agent():
         """Test the agent with sample queries."""
         test_queries = [
             "How do I create an S3 bucket lifecycle policy?",
             "What are the best practices for Lambda cold start optimization?",
         ]
-        
+
         agent = create_agent()
-        
+
         for query in test_queries:
             print(f"\n🔍 Query: {query}")
             try:
@@ -134,5 +135,5 @@ if __name__ == "__main__":
                 print(f"📋 Answer: {result}")
             except Exception as e:
                 print(f"❌ Error: {e}")
-    
+
     asyncio.run(test_agent())
