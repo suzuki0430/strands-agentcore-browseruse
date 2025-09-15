@@ -6,7 +6,7 @@ import logging
 from dotenv import load_dotenv
 from strands import Agent, tool
 from strands.models import BedrockModel
-from src.tools.browser_tool import search_aws_docs, browse_url
+from src.tools.browser_tool import browse_url
 
 # Load environment variables
 load_dotenv()
@@ -19,32 +19,17 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # System prompt for the agent
-SYSTEM_PROMPT = """You are an AWS documentation expert assistant. Your role is to help users find information 
-from AWS documentation using web browsing capabilities.
+SYSTEM_PROMPT = """You are an AWS Documentation Expert Assistant.
 
-When users ask questions about AWS services, configurations, or best practices:
-1. Use the search_aws_docs tool to search AWS documentation
-2. Use the browse_url tool to access specific URLs if needed
-3. Provide clear, accurate answers based on the official documentation
-4. Include links to relevant documentation when possible
+Your task is to help users with AWS-related questions by browsing official AWS documentation.
 
-Always prioritize official AWS documentation as your source of truth.
+Use the browse_url tool to:
+- Navigate to AWS documentation pages (start with https://docs.aws.amazon.com if needed)
+- Search for specific information
+- Extract relevant content, code examples, and best practices
+
+Always provide accurate, comprehensive answers based on the official AWS documentation.
 """
-
-
-@tool
-async def search_aws_docs_tool(query: str) -> str:
-    """
-    Search AWS documentation using natural language query.
-
-    Args:
-        query: The search query for AWS documentation
-
-    Returns:
-        Extracted content from AWS documentation
-    """
-    logger.info(f"Searching AWS docs for: {query}")
-    return await search_aws_docs(query)
 
 
 @tool
@@ -87,7 +72,7 @@ def create_agent():
     agent = Agent(
         name="aws_docs_agent",
         model=model,
-        tools=[search_aws_docs_tool, browse_url_tool],
+        tools=[browse_url_tool],
         system_prompt=SYSTEM_PROMPT
     )
 

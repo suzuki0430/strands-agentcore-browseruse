@@ -108,30 +108,6 @@ async def execute_browser_task(
             logger.info("Browser client stopped")
 
 
-async def search_aws_docs(query: str, region: str = None) -> str:
-    """
-    Search AWS documentation for a specific query.
-
-    Args:
-        query: The search query
-        region: AWS region for AgentCore Browser
-
-    Returns:
-        Search results from AWS documentation
-    """
-    instruction = f"""
-    Search for "{query}" in the AWS documentation.
-    Extract and summarize the most relevant information from the search results.
-    Include any important details, code examples, or best practices mentioned.
-    """
-
-    return await execute_browser_task(
-        instruction=instruction,
-        starting_url="https://docs.aws.amazon.com",
-        region=region
-    )
-
-
 async def browse_url(url: str, instruction: str = "Extract the main content", region: str = None) -> str:
     """
     Browse a specific URL and perform an action.
