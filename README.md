@@ -142,7 +142,7 @@ agentcore launch
 agentcore launch --auto-update-on-conflict
 ```
 
-## 💡 Usage
+## Usage
 
 ### Basic Query
 
