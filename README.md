@@ -1,69 +1,113 @@
 # AWS Documentation Search Agent
 
-**Strands Agents**、**Amazon Bedrock AgentCore Runtime**、**Browser Use**を組み合わせて、AWS 公式ドキュメントを自動で検索・要約する AI エージェントを実装したプロジェクトです。
+An AI agent that combines **Strands Agents**, **Amazon Bedrock AgentCore Runtime**, and **Browser Use** to automatically search and summarize AWS official documentation.
 
-「S3 バケットのライフサイクルポリシーってどうやって作るの？」といった質問を投げると、エージェントが自動で AWS 公式ドキュメントをブラウジングして、要点をまとめて回答してくれます。
+Ask questions like "How do I create a lifecycle policy for an S3 bucket?" and the agent will automatically browse AWS official documentation and provide a comprehensive summary of the key points.
 
-## アーキテクチャ
+## Architecture
 
 ```
 ┌─────────────────────────────────┐
-│   Bedrock AgentCore Runtime     │  ← AWSマネージド実行環境
+│   Bedrock AgentCore Runtime     │  ← AWS Managed Execution Environment
 │  ┌───────────────────────────┐  │
-│  │     Strands Agent         │  │  ← Claude Sonnet 4使用
+│  │     Strands Agent         │  │  ← Using Claude Sonnet 4
 │  │   (browse_url_tool)       │  │
 │  └─────────────┬─────────────┘  │
 └────────────────┼─────────────────┘
-                 │ Tool実行
+                 │ Tool Execution
                  ▼
        ┌─────────────────────┐
-       │    Browser Use      │        ← LLM駆動ブラウザ自動化
-       │   (自然言語操作)     │
+       │    Browser Use      │        ← LLM-driven Browser Automation
+       │ (Natural Language)  │
        └──────────┬──────────┘
                   │ CDP WebSocket
                   ▼
    ┌──────────────────────────────┐
-   │   AgentCore Browser          │  ← AWSマネージドブラウザ
-   │ - セッション分離              │
-   │ - Live View機能              │
-   │ - CloudTrail監査             │
+   │   AgentCore Browser          │  ← AWS Managed Browser
+   │ - Session Isolation          │
+   │ - Live View Feature          │
+   │ - CloudTrail Auditing        │
    └──────────────────────────────┘
 ```
 
-## クイックスタート
+## Quick Start
 
-### 前提条件
+### Prerequisites
 
-- **Python 3.11 以上**
-- **AWS アカウントと認証情報**
-- **リージョン: us-west-2** （AgentCore が利用可能）
-- **Claude Sonnet 4 の基盤モデルアクセス**を有効化
+- **Python 3.11+**
+- **AWS Account with credentials configured**
+- **Region: us-west-2** (AgentCore availability)
+- **Claude Sonnet 4 foundation model access** enabled in Bedrock
 
-### 1. 環境構築
+### 1. Environment Setup
 
 ```bash
-# リポジトリをクローン
+# Clone the repository
 git clone https://github.com/suzuki0430/strands-agentcore-browseruse.git
 cd strands-agentcore-browseruse
 
-# 仮想環境を作成
+# Create virtual environment
 python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 
-# 依存パッケージをインストール
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-### 2. AgentCore Runtime の設定
+### 2. Environment Configuration
+
+Create a `.env` file in the project root (optional for local development):
 
 ```bash
-# デプロイ設定
+# AWS Configuration
+AWS_REGION=us-west-2
+AWS_DEFAULT_REGION=us-west-2
+
+# Bedrock Model Configuration
+BEDROCK_MODEL_ID=us.anthropic.claude-sonnet-4-20250514-v1:0
+
+# AgentCore Browser Configuration
+AGENTCORE_BROWSER_REGION=us-west-2
+
+# AWS Credentials (optional if using IAM roles/profiles)
+# AWS_ACCESS_KEY_ID=your_access_key_id
+# AWS_SECRET_ACCESS_KEY=your_secret_access_key
+# AWS_SESSION_TOKEN=your_session_token  # if using temporary credentials
+```
+
+### 3. AWS Credentials Setup
+
+Configure AWS credentials using one of these methods:
+
+#### Option 1: AWS CLI (Recommended)
+
+```bash
+aws configure
+# Enter your Access Key ID, Secret Access Key, and default region
+```
+
+#### Option 2: Environment Variables
+
+```bash
+export AWS_ACCESS_KEY_ID=your_access_key_id
+export AWS_SECRET_ACCESS_KEY=your_secret_access_key
+export AWS_DEFAULT_REGION=us-west-2
+```
+
+#### Option 3: IAM Roles (For EC2/Lambda)
+
+Use IAM roles for service-to-service authentication in production.
+
+### 4. AgentCore Runtime Configuration
+
+```bash
+# Configure deployment settings
 agentcore configure --entrypoint src/runtime/agentcore_app.py --region us-west-2
 ```
 
-### 3. IAM ポリシーの追加
+### 5. IAM Policy Setup
 
-`agentcore configure`で作成される IAM ロール（`AmazonBedrockAgentCoreSDKRuntime-us-west-2-*`）に、以下のポリシーを追加してください：
+Add the following policy to the IAM role created by `agentcore configure` (role name starts with `AmazonBedrockAgentCoreSDKRuntime-us-west-2-`):
 
 ```json
 {
@@ -88,60 +132,68 @@ agentcore configure --entrypoint src/runtime/agentcore_app.py --region us-west-2
 }
 ```
 
-### 4. デプロイ
+### 6. Deploy to AgentCore Runtime
 
 ```bash
-# 初回デプロイ
+# Initial deployment
 agentcore launch
 
-# 再デプロイ時
+# Re-deployment with conflict resolution
 agentcore launch --auto-update-on-conflict
 ```
 
-## 💡 使用方法
+## 💡 Usage
 
-### 基本的な質問
+### Basic Query
 
 ```bash
 agentcore invoke '{"prompt": "How can I create a lifecycle policy for an S3 bucket?"}'
 ```
 
-### その他のサンプルクエリ
+### Sample Queries
 
-- 「Lambda 関数のコールドスタート最適化のベストプラクティスは？」
-- 「DynamoDB のグローバルセカンダリインデックスの作成方法」
-- 「CloudFront と S3 の連携設定手順」
-- 「IAM の最小権限アクセスのベストプラクティス」
+- "What are the best practices for Lambda cold start optimization?"
+- "How to create a DynamoDB Global Secondary Index?"
+- "CloudFront and S3 integration setup steps"
+- "IAM least privilege access best practices"
 
-## ファイル構成
+### Local Development Testing
+
+```bash
+# Test agent locally (before deployment)
+python src/agents/main_agent.py
+```
+
+## 📁 Project Structure
 
 ```
 src/
 ├── agents/
-│   └── main_agent.py      # メインエージェント（Strands Agents使用）
+│   └── main_agent.py      # Main agent implementation (Strands Agents)
 ├── runtime/
-│   └── agentcore_app.py   # AgentCore Runtime統合
+│   └── agentcore_app.py   # AgentCore Runtime integration
 └── tools/
-    └── browser_tool.py    # ブラウザ操作ツール
+    └── browser_tool.py    # Browser automation tool
 tests/
-└── test_aws_search.py     # テストケース
-requirements.txt           # 依存パッケージ
-Dockerfile                 # コンテナ設定
+└── test_aws_search.py     # Test cases
+requirements.txt           # Python dependencies
+Dockerfile                 # Container configuration
+.env                       # Environment variables (not tracked)
 ```
 
-## 技術仕様
+## Technical Specifications
 
-### 使用技術
+### Technology Stack
 
-- **Strands Agents v1.8.0** - エージェントフレームワーク
-- **Browser Use <0.3.3** - ブラウザ自動化ライブラリ
-- **Amazon Bedrock AgentCore** - マネージド実行・ブラウザ環境
-- **Claude Sonnet 4** - LLM モデル
+- **Strands Agents v1.8.0** - Agent framework
+- **Browser Use <0.3.3** - Browser automation library
+- **Amazon Bedrock AgentCore** - Managed execution and browser environment
+- **Claude Sonnet 4** - LLM model
 - **Python 3.11+**
 
-## 📚 参考資料
+## References
 
-- [Amazon Bedrock AgentCore](https://aws.amazon.com/jp/blogs/aws/introducing-amazon-bedrock-agentcore-securely-deploy-and-operate-ai-agents-at-any-scale/)
+- [Amazon Bedrock AgentCore](https://aws.amazon.com/blogs/aws/introducing-amazon-bedrock-agentcore-securely-deploy-and-operate-ai-agents-at-any-scale/)
 - [Strands Agents Documentation](https://strandsagents.com/latest/)
 - [Browser Use GitHub](https://github.com/browser-use/browser-use)
 - [AgentCore Browser Workshop](https://catalog.us-east-1.prod.workshops.aws/workshops/015a2de4-9522-4532-b2eb-639280dc31d8/en-US/60-agentcore-tools/62-browser-tool)
